@@ -1,0 +1,188 @@
+-- 1
+SELECT v.wilaya, t.annee as Annee, t.mois as Mois, round(avg(f.prix), 3) as Moyenne, sum(f.qte) as Somme
+FROM olap_fais_med f
+         natural join olap_temps t
+         natural join olap_ville v
+WHERE v.WILAYA in ('Alger', 'Oran')
+  and t.MOIS in (1, 2, 3)
+GROUP BY v.wilaya, t.ANNEE, t.MOIS
+ORDER BY v.wilaya, t.ANNEE, t.MOIS asc;
+
+-- 2
+SELECT v.wilaya, t.annee as Annee, t.mois as Mois, round(avg(f.prix), 3) as Moyenne, sum(f.qte) as Somme
+FROM olap_fais_med f
+         natural join olap_temps t
+         natural join olap_ville v
+WHERE v.WILAYA in ('Alger', 'Oran')
+  and t.MOIS in (1, 2, 3)
+GROUP BY CUBE (v.WILAYA, t.ANNEE, t.MOIS)
+ORDER BY v.WILAYA, t.ANNEE, t.MOIS asc;
+
+-- 3
+SELECT decode(grouping(v.wilaya), 1, 'Alger et Oran', v.WILAYA)     as Wilaya,
+       decode(grouping(t.annee), 1, 'Toutes les années', t.ANNEE)   as Annee,
+       decode(grouping(t.mois), 1, 'Entre Janvier et Mars', t.MOIS) as Mois,
+       round(avg(f.prix), 3)                                        as Moyenne,
+       sum(f.qte)                                                   as Somme
+FROM olap_fais_med f
+         natural join olap_temps t
+         natural join olap_ville v
+WHERE v.WILAYA in ('Alger', 'Oran')
+  and t.MOIS in (1, 2, 3)
+GROUP BY CUBE (v.WILAYA, t.ANNEE, t.MOIS)
+ORDER BY v.WILAYA, t.ANNEE, t.MOIS asc;
+
+-- 4
+SELECT
+        DECODE(GROUPING(q.qualite), 1, 'Toutes les qualités', q.QUALITE) as Qualité,
+        DECODE(GROUPING(v.wilaya),1,'Toutes les wilayas',v.WILAYA) as Wilaya,
+        MAX(f.QTE) as Maximum
+FROM OLAP_FAIS_MED f
+         natural join OLAP_TEMPS t
+         natural join OLAP_QUALITE q
+         natural join OLAP_VILLE v
+WHERE v.WILAYA in ('Oran', 'Alger', 'Tlemcen')
+  and t.MOIS = 1
+  and t.ANNEE = 2012
+GROUP BY q.QUALITE, ROLLUP (v.WILAYA)
+ORDER BY q.QUALITE, v.WILAYA;
+
+-- 5
+SELECT
+       DECODE(GROUPING(q.qualite), 1, 'Toutes les qualités', q.QUALITE) as Qualité,
+       DECODE(GROUPING(v.wilaya),1,'Toutes les wilayas',v.WILAYA) as Wilaya,
+       SUM(f.qte * f.prix)
+FROM OLAP_FAIS_MED f
+         natural join OLAP_TEMPS t
+         natural join OLAP_QUALITE q
+         natural join OLAP_VILLE v
+WHERE t.mois = 1
+  and t.annee = 2012
+GROUP BY GROUPING SETS (q.qualite, v.wilaya,())
+ORDER BY q.qualite, v.wilaya;
+
+-- 6
+SELECT
+DECODE(GROUPING(q.qualite),1,'Toutes les qualités',q.qualite) as Qualité,
+DECODE(GROUPING(v.wilaya),1,'Toutes les wilayas',v.wilaya) as Wilaya,
+DECODE(GROUPING(t.annee),1,'Toutes les années',t.annee) as Année,
+DECODE(GROUPING(t.mois),1,'Tous les mois',t.mois) as Mois,
+SUM(f.qte * f.prix)
+FROM OLAP_FAIS_MED f
+         natural join OLAP_TEMPS t
+         natural join OLAP_QUALITE q
+         natural join OLAP_VILLE v
+WHERE v.wilaya in ('Oran','Alger','Tlemcen')
+GROUP BY GROUPING SETS(ROLLUP(q.qualite,v.wilaya),ROLLUP(t.annee,t.mois))
+--GROUP BY GROUPING SETS(ROLLUP(q.qualite,v.wilaya,t.annee),ROLLUP(q.qualite,v.wilaya,t.mois))
+ORDER BY q.qualite,v.wilaya,t.annee,t.mois;
+
+--Ma solution
+SELECT
+DECODE(GROUPING(v.wilaya),1,'Toutes les wilayas',v.wilaya) as Wilaya,
+DECODE(GROUPING(q.qualite),1,'Toutes les qualités',q.qualite) as Qualité,
+DECODE(GROUPING(t.mois),1,'Tous les mois',t.mois) as Mois,
+DECODE(GROUPING(t.annee),1,'Toutes les années',t.annee) as Année,
+SUM(f.qte * f.prix)
+FROM OLAP_FAIS_MED f
+         natural join OLAP_TEMPS t
+         natural join OLAP_QUALITE q
+         natural join OLAP_VILLE v
+WHERE v.wilaya in ('Oran','Alger','Tlemcen')
+GROUP BY GROUPING SETS(ROLLUP(v.wilaya, q.qualite),ROLLUP(t.annee,t.mois))
+ORDER BY v.wilaya,q.qualite,t.mois, t.annee,total;
+
+--7
+SELECT q.QUALITE,v.WILAYA,SUM(f.QTE) as Somme,
+RANK() over (partition by q.QUALITE ORDER BY SUM(f.QTE) DESC) as Rang,
+SUM(SUM(f.qte * f.prix)) over(partition by q.QUALITE) as Total,
+RATIO_TO_REPORT(sum(f.qte*f.prix)) over()*100"% du total"
+FROM OLAP_FAIS_MED f
+         natural join OLAP_TEMPS t
+         natural join OLAP_QUALITE q
+         natural join OLAP_VILLE v
+WHERE (t.ANNEE = 2010)  and v.WILAYA in ('Oran','Alger','Tlemcen')
+GROUP BY q.QUALITE, v.WILAYA
+ORDER BY q.QUALITE, Rang;
+
+/*
+SELECT q.QUALITE,v.WILAYA,SUM(f.QTE) as Somme,
+RANK() over (partition by q.QUALITE ORDER BY SUM(f.QTE) DESC) as Rang
+FROM OLAP_FAIS_MED f
+         natural join OLAP_TEMPS t
+         natural join OLAP_QUALITE q
+         natural join OLAP_VILLE v
+WHERE (t.ANNEE = 2010)
+GROUP BY GROUPING SETS(v.WILAYA,q.qualite)
+ORDER BY q.QUALITE, Rang;
+*/
+
+--8
+SELECT Wilaya,Ville,Somme FROM (
+SELECT v.WILAYA as Wilaya,v.VILLE as Ville,SUM(f.QTE) as Somme,
+RANK() over (partition by v.wilaya ORDER BY SUM(f.QTE) DESC) as Rang
+FROM OLAP_FAIS_MED f
+         natural join OLAP_TEMPS t
+         natural join OLAP_QUALITE q
+         natural join OLAP_VILLE v
+WHERE t.annee=2010
+GROUP BY v.ville,v.wilaya
+ORDER BY v.WILAYA)
+WHERE RANG<=3;
+
+--9
+SELECT Wilaya,Ville,Somme FROM (
+SELECT v.WILAYA as Wilaya,v.VILLE as Ville,SUM(f.QTE) as Somme,
+RANK() over (partition by v.wilaya ORDER BY SUM(f.QTE) ASC) as Rang
+FROM OLAP_FAIS_MED f
+         natural join OLAP_TEMPS t
+         natural join OLAP_QUALITE q
+         natural join OLAP_VILLE v
+WHERE t.annee=2010 and q.qualite='high'
+GROUP BY v.ville,v.wilaya
+ORDER BY v.WILAYA)
+WHERE RANG<=2;
+
+
+--10
+SELECT v.WILAYA as Wilaya,SUM(f.QTE*f.prix) as Somme,
+ntile(4) over (ORDER BY SUM(f.QTE*f.prix) ASC) as Rang
+FROM OLAP_FAIS_MED f
+         natural join OLAP_TEMPS t
+         natural join OLAP_QUALITE q
+         natural join OLAP_VILLE v
+WHERE t.annee=2010
+GROUP BY v.wilaya
+ORDER BY rang,somme,v.WILAYA;
+
+--11
+SELECT 
+DECODE(GROUPING(q.qualite),1,'Toutes les qualités',q.qualite) as Qualite,
+DECODE(GROUPING(t.annee),1,'Toutes les années',t.annee) as Année,
+DECODE(GROUPING(t.mois),1,'Tous les mois',t.mois) as Mois,
+SUM(f.qte*f.prix) as Coût
+FROM OLAP_FAIS_MED f
+         natural join OLAP_TEMPS t
+         natural join OLAP_QUALITE q
+GROUP BY  grouping sets(q.qualite,t.annee,t.mois)
+ORDER BY qualite,annee,mois;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+SELECT q.qualite ,sum(f.qte) "TOTAL"
+FROM olap_fais_med f natural join olap_temps t natural join olap_ville v
+natural join olap_qualite q
+WHERE t.mois in (1,6) and v.wilaya in('Sidi Bel Abbes','Oran')
+GROUP BY  grouping sets (q.qualite);
